@@ -2,13 +2,12 @@ name: Daily Grundsalg Monitor
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # Daily at 06:00 UTC
+    - cron: "0 6 * * *"   # daily 06:00 UTC
   workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -19,14 +18,11 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run monitor
         env:
+          SHEETS_WEBAPP_URL: ${{ secrets.SHEETS_WEBAPP_URL }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SHEETS_WEBAPP_URL: ${{ secrets.SHEETS_WEBAPP_URL }}
-        run: |
-          python monitor.py
+        run: python monitor.py
