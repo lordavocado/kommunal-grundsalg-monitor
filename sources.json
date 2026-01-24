@@ -1,0 +1,686 @@
+{
+  "version": "1.0",
+  "updated": "2026-01-24",
+  "description": "Danish municipality property sale (grundsalg) monitoring sources",
+  "sources": [
+    {
+      "id": "frederiksberg",
+      "name": "Frederiksberg",
+      "url": "https://www.frederiksberg.dk/kommunen/nyheder",
+      "region": "capital",
+      "type": "news_feed"
+    },
+    {
+      "id": "dragoer",
+      "name": "Dragør",
+      "url": "https://www.dragoer.dk/om-kommunen/udbud",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "taarnby",
+      "name": "Tårnby",
+      "url": "https://www.taarnby.dk/erhverv/start-driv-og-udvikl-virksomhed/kob-bygge-og-erhvervsgrunde/",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "koebenhavn",
+      "name": "København",
+      "url": "https://www.kk.dk/erhverv/ejendomme/ejendomme-til-salg",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "albertslund",
+      "name": "Albertslund",
+      "url": "https://albertslund.dk/nyheder",
+      "region": "capital",
+      "type": "news_feed"
+    },
+    {
+      "id": "ballerup",
+      "name": "Ballerup",
+      "url": "https://ballerup.dk/borger/trafik/ejendomme-og-grunde-til-salg",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "broendby",
+      "name": "Brøndby",
+      "url": "https://www.brondby.dk/erhverv/udbud-og-indkob/igangvaerende-udbud",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "roedovre",
+      "name": "Rødovre",
+      "url": "https://www.rk.dk/aktuelt",
+      "region": "capital",
+      "type": "news_feed"
+    },
+    {
+      "id": "hvidovre",
+      "name": "Hvidovre",
+      "url": "https://www.hvidovre.dk/om-kommunen/ejendomme-til-salg-og-forpagtninger-i-udbud",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "glostrup",
+      "name": "Glostrup",
+      "url": "https://www.glostrup.dk/borger/bolig-og-byggeri/find-bolig-og-ejendomssalg/ejendomme-og-grunde-til-salg",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "herlev",
+      "name": "Herlev",
+      "url": "https://herlev.dk/erhverv/indkoeb-og-udbud/aktuelle-udbud",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "gladsaxe",
+      "name": "Gladsaxe",
+      "url": "https://gladsaxe.dk/kommunen/salg-af-kommunale-ejendomme",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "gentofte",
+      "name": "Gentofte",
+      "url": "https://gentofte.dk/",
+      "region": "capital",
+      "type": "minimal"
+    },
+    {
+      "id": "lyngby-taarbaek",
+      "name": "Lyngby-Taarbæk",
+      "url": "https://www.ltk.dk/erhverv/byggeri-og-ejendomme/ejendomme-til-salg",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "rudersdal",
+      "name": "Rudersdal",
+      "url": "https://rudersdal.dk/erhvervsliv/udbud-i-kommunen",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "furesoe",
+      "name": "Furesø",
+      "url": "https://www.furesoe.dk/erhverv/grunde-ejendomme-og-lokaler",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "greve",
+      "name": "Greve",
+      "url": "https://greve.dk/erhverv/grunde-og-bygninger",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "hoeje-taastrup",
+      "name": "Høje-Taastrup",
+      "url": "https://www.htk.dk/erhvervsliv/vaekst-og-erhverv/grunde-og-ejendomme-til-salg",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "ishoej",
+      "name": "Ishøj",
+      "url": "https://ishoj.dk/erhverv/byggeri-og-grunde/",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "hoersholm",
+      "name": "Hørsholm",
+      "url": "https://www.horsholm.dk/nyhed",
+      "region": "capital",
+      "type": "news_feed"
+    },
+    {
+      "id": "hilleroed",
+      "name": "Hillerød",
+      "url": "https://www.hillerod.dk/nyheder-og-fakta/udvikling-og-planer/grunde-til-salg/",
+      "region": "capital",
+      "type": "news_feed"
+    },
+    {
+      "id": "helsingoer",
+      "name": "Helsingør",
+      "url": "https://helsingor.dk/virksomhed/salg-af-grunde-og-ejendomme",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "gribskov",
+      "name": "Gribskov",
+      "url": "https://gribskov.dk/erhverv/salg-af-grunde-og-ejendomme",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "frederikssund",
+      "name": "Frederikssund",
+      "url": "https://www.frederikssund.dk/Erhverv/ejendomme-til-salg/Salg-af-grunde-ejendomme-mv",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "fredensborg",
+      "name": "Fredensborg",
+      "url": "https://fredensborg.dk/kommunen/kommunen-i-udvikling/byggegrunde",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "halsnaes",
+      "name": "Halsnæs",
+      "url": "https://halsnaes.dk/erhverv/grunde-og-erhvervslokaler",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "alleroed",
+      "name": "Allerød",
+      "url": "https://alleroed.dk/erhverv/grunde-ejendomme-og-lokaler",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "egedal",
+      "name": "Egedal",
+      "url": "https://egedalkommune.dk/erhverv/grunde-ejendomme-og-lokaler/erhvervsomraader-og-grunde-til-salg",
+      "region": "capital",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "roskilde",
+      "name": "Roskilde",
+      "url": "https://www.roskilde.dk/da-dk/service-og-selvbetjening/borger/bolig-og-byggeri/grunde-til-salg/",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "holbaek",
+      "name": "Holbæk",
+      "url": "https://holbaek.dk/service-og-selvbetjening/bolig-og-byggeri/ejendomme-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "koege",
+      "name": "Køge",
+      "url": "https://www.koege.dk/borger/bolig-og-byggeri/byggegrunde-og-ejendomme-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "odense",
+      "name": "Odense",
+      "url": "https://grundsalg.kortinfo.net/odense-grundsalg/",
+      "region": "funen",
+      "type": "kortinfo"
+    },
+    {
+      "id": "aarhus",
+      "name": "Aarhus",
+      "url": "https://grundsalg.aarhus.dk/",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "aalborg",
+      "name": "Aalborg",
+      "url": "https://www.aalborg.dk/mit-liv/min-bolig/grundsalg-i-aalborg-kommune",
+      "region": "north-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "esbjerg",
+      "name": "Esbjerg",
+      "url": "https://erhvervsgrunde.esbjerg.dk/alle-udstykninger",
+      "region": "south-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "silkeborg",
+      "name": "Silkeborg",
+      "url": "https://grundeisilkeborg.silkeborg.dk/",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "aabenraa",
+      "name": "Aabenraa",
+      "url": "https://aabenraa.dk/erhverv/byggeri-og-erhvervsgrunde/erhvervsgrunde-til-salg",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "randers",
+      "name": "Randers",
+      "url": "https://www.randers.dk/borger/bolig/byggegrunde/",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "assens",
+      "name": "Assens",
+      "url": "https://www.assens.dk/erhverv/arealer-og-ejendomme-til-salg",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "bornholm",
+      "name": "Bornholm",
+      "url": "https://brk.dk/Borger/Bolig/ejendomme%20til%20salg/sider/ejendomme%20til%20salg.aspx",
+      "region": "bornholm",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "broenderslev",
+      "name": "Brønderslev",
+      "url": "https://byggegrunde.bronderslev.dk/",
+      "region": "north-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "fanoe",
+      "name": "Fanø",
+      "url": "https://fanoe.dk/borger/byggeri-og-bolig/salg-af-grunde#oversigtskort-79",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "faxe",
+      "name": "Faxe",
+      "url": "https://www.faxekommune.dk/da/erhverv/grunde-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "fredericia",
+      "name": "Fredericia",
+      "url": "https://grundsalg.kortinfo.net/fredericia_grundsalg/",
+      "region": "south-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "haderslev",
+      "name": "Haderslev",
+      "url": "https://www.haderslev.dk/service/raadgivning-og-regler-for-erhverv/erhvervsbyggeri-og-erhvervsgrunde/erhvervsgrunde-til-salg",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "herning",
+      "name": "Herning",
+      "url": "https://grundsalg.herning.dk/",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "favrskov",
+      "name": "Favrskov",
+      "url": "https://flyttilfavrskov.dk/grunde",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "guldborgsund",
+      "name": "Guldborgsund",
+      "url": "https://www.guldborgsund.dk/borger/flytte-bo-og-bygge/byggegrunde-og-andre-grunde/grunde-efter-nedrivning",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "frederikshavn",
+      "name": "Frederikshavn",
+      "url": "https://grundsalg.kortinfo.net/frederikshavn-grundsalg",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "hjoerring",
+      "name": "Hjørring",
+      "url": "https://nyudsigt.dk/grundsalg",
+      "region": "north-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "holstebro",
+      "name": "Holstebro",
+      "url": "https://www.holstebro.dk/grundsalg",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "horsens",
+      "name": "Horsens",
+      "url": "https://byggegrunde.horsens.dk/",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "lolland",
+      "name": "Lolland",
+      "url": "https://www.lolland.dk/erhverv/byggegrunde",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "ikast-brande",
+      "name": "Ikast-Brande",
+      "url": "https://grundsalg.ikast-brande.dk/",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "jammerbugt",
+      "name": "Jammerbugt",
+      "url": "https://grundsalg.kortinfo.net/jammerbugt-grundsalg/Parcelhusgrunde/omraade/0",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "kalundborg",
+      "name": "Kalundborg",
+      "url": "https://kalundborg.dk/erhverv/salg-af-kommunale-ejendomme-og-arealer",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "kerteminde",
+      "name": "Kerteminde",
+      "url": "https://kerteminde.dk/erhverv/grunde-og-ejendomme",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "kolding",
+      "name": "Kolding",
+      "url": "https://komtilkolding.dk/her-kan-du-bo/byggegrunde/",
+      "region": "south-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "langeland",
+      "name": "Langeland",
+      "url": "https://langelandkommune.dk/erhverv/langeland-kommunes-erhvervsgrunde-til-salg",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "lejre",
+      "name": "Lejre",
+      "url": "https://www.lejre.dk/borger/bolig-byggeri-og-affald/ejendomme-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "lemvig",
+      "name": "Lemvig",
+      "url": "https://lemvig.dk/selvbetjening-og-service/erhverv/erhvervsgrunde-og-storparceller",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "hedensted",
+      "name": "Hedensted",
+      "url": "https://www.byggegrunde.hedensted.dk/",
+      "region": "central-jutland",
+      "type": "minimal"
+    },
+    {
+      "id": "laesoe",
+      "name": "Læsø",
+      "url": "https://www.laesoe.dk/erhverv/kommunale-udbud",
+      "region": "north-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "mariagerfjord",
+      "name": "Mariagerfjord",
+      "url": "https://grundsalg.kortinfo.net/mariagerfjord-kommune/",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "middelfart",
+      "name": "Middelfart",
+      "url": "https://middelfart.dk/bolig/byggegrunde",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "morsoe",
+      "name": "Morsø",
+      "url": "https://grundsalg.kortinfo.net/morsoe-grundsalg/",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "norddjurs",
+      "name": "Norddjurs",
+      "url": "https://byggegrunde.norddjurs.dk/byggegrunde",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "nordfyns",
+      "name": "Nordfyns",
+      "url": "https://grundsalg.kortinfo.net/nordfyns-grundsalg/Parcelhusgrunde/omraade/0/",
+      "region": "funen",
+      "type": "kortinfo"
+    },
+    {
+      "id": "nyborg",
+      "name": "Nyborg",
+      "url": "https://www.nyborg.dk/da/erhverv/grunde-ejendomme-og-lokaler/erhvervsgrunde-og-storparceller-erhverv-og-vaekst/",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "naestved",
+      "name": "Næstved",
+      "url": "https://www.naestved.dk/bolig-og-miljoe/byggegrunde-og-ejendomme-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "odder",
+      "name": "Odder",
+      "url": "https://odder.dk/erhverv/udbud-og-indkoeb/aktuelle-udbud",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "odsherred",
+      "name": "Odsherred",
+      "url": "https://www.odsherred.dk/da/starte-og-drive-virksomhed/erhvervsbyggeri-og-erhvervsgrunde/erhvervsjord-grunde-og-ejendomme/salg-af-kommunale-ejendomme-og-arealer/",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "rebild",
+      "name": "Rebild",
+      "url": "http://grundsalg.kortinfo.net/rebild-grundsalg/Boliggrunde/omraade/0",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "ringkoebing-skjern",
+      "name": "Ringkøbing-Skjern",
+      "url": "https://grundsalg.rksk.dk/erhverv",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "ringsted",
+      "name": "Ringsted",
+      "url": "https://ringsted.dk/da/grunde-til-salg#paragraph-2523",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "samsoe",
+      "name": "Samsø",
+      "url": "https://www.samsoe.dk/borger/bolig-havne-og-veje/salg-af-boliger-og-byggegrunde",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "skive",
+      "name": "Skive",
+      "url": "https://skive.dk/borger/bygge-bo-og-flytte/grund-og-ejendomssalg/",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "skanderborg",
+      "name": "Skanderborg",
+      "url": "https://www.skanderborg.dk/borger/flytte-bo-og-bygge/byggegrunde-til-salg",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "slagelse",
+      "name": "Slagelse",
+      "url": "https://www.slagelse.dk/da/service-og-selvbetjening/bolig-og-byggeri/byggeri-bbr-lokalplaner-og-kommuneplan/byggegrunde-til-salg/",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "soroe",
+      "name": "Sorø",
+      "url": "https://soroe.dk/service-og-selvbetjening/erhverv-og-virksomheder/erhvervsgrunde-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "solroed",
+      "name": "Solrød",
+      "url": "https://solrod.dk/service-og-selvbetjening/bolig-og-byggeri/bolig/byggegrunde-og-ejendomme-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "stevns",
+      "name": "Stevns",
+      "url": "https://stevns.dk/service-and-selvbetjening/erhverv/koeb-og-leje-af-erhvervsgrunde",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "struer",
+      "name": "Struer",
+      "url": "https://www.struer.dk/grundsalg/boliggrunde-til-salg/struer",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "svendborg",
+      "name": "Svendborg",
+      "url": "https://www.svendborg.dk/borger/bolig-og-byggeri/byggegrunde/",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "syddjurs",
+      "name": "Syddjurs",
+      "url": "https://www.syddjursgrundsalg.dk/",
+      "region": "central-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "soenderborg",
+      "name": "Sønderborg",
+      "url": "https://sonderborgkommune.dk/projektejendomme",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "thisted",
+      "name": "Thisted",
+      "url": "https://grundsalg.kortinfo.net/thisted-ny-grundsalg/",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "toender",
+      "name": "Tønder",
+      "url": "https://grundsalg.toender.dk/",
+      "region": "south-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "varde",
+      "name": "Varde",
+      "url": "https://vardekommune.dk/borger/bolig-og-byggeri/byggegrunde-til-salg-i-varde-kommune/",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "vejen",
+      "name": "Vejen",
+      "url": "https://boivejen.inst.vejen.dk/hvordan-vil-du-bo/kommunale-byggegrunde/alle-udstykninger",
+      "region": "south-jutland",
+      "type": "dedicated_portal"
+    },
+    {
+      "id": "vejle",
+      "name": "Vejle",
+      "url": "https://www.vejle.dk/da/service-og-selvbetjening/erhverv/erhvervsbyggeri-og-grunde/erhvervsgrunde-i-vejle-kommune/",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "vesthimmerland",
+      "name": "Vesthimmerland",
+      "url": "https://grundsalg.kortinfo.net/vesthimmerland-grundsalg",
+      "region": "north-jutland",
+      "type": "kortinfo"
+    },
+    {
+      "id": "viborg",
+      "name": "Viborg",
+      "url": "https://viborg.dk/erhverv/erhvervsbyggeri-og-erhvervsgrunde/erhvervsgrunde/",
+      "region": "central-jutland",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "vordingborg",
+      "name": "Vordingborg",
+      "url": "https://vordingborg.dk/erhverv/erhvervsejendomme-og-erhvervsgrunde-til-salg",
+      "region": "zealand",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "aeroe",
+      "name": "Ærø",
+      "url": "https://www.aeroekommune.dk/mit-liv/byg-og-bolig/grunde-til-salg",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "faaborg-midtfyn",
+      "name": "Faaborg-Midtfyn",
+      "url": "https://www.fmk.dk/erhverv/byggeri-og-erhvervsgrunde/byggegrunde-til-erhverv/",
+      "region": "funen",
+      "type": "municipality_subsection"
+    },
+    {
+      "id": "billund",
+      "name": "Billund",
+      "url": "https://www.billund.dk/erhverv/byggeri/",
+      "region": "south-jutland",
+      "type": "municipality_subsection"
+    }
+  ]
+}

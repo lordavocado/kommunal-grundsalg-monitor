@@ -1,5 +1,9 @@
 import os
 import requests
+from dotenv import load_dotenv
+
+# Load environment variables from env.local
+load_dotenv('env.local')
 
 BASE = os.environ["SHEETS_WEBAPP_URL"]
 
