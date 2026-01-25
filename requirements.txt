@@ -1,4 +1,4 @@
 requests>=2.32.3
-firecrawl-py>=1.0.0
+firecrawl-py==1.0.0
 openai>=2.15.0
 python-dotenv>=1.0.0
