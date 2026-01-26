@@ -112,36 +112,86 @@ def get_sources() -> List[dict]:
         print(f"Error loading sources: {e}")
         return []
 
-def is_property_related(url: str, content: str) -> bool:
-    """Use AI to classify if content is about property sales (for news feed sites)."""
-    # Quick keyword check first - if obvious property content, skip AI call
+def classify_relevance(url: str, content: str) -> dict:
+    """
+    Classify if content is property-related using keywords + AI (loose filter).
+    Returns structured response with is_relevant, confidence, category, reason.
+    """
+    result = {
+        "is_relevant": False,
+        "confidence": 0.0,
+        "category": "unknown",
+        "reason": ""
+    }
+
+    # Quick keyword check first - if obvious property content, high confidence
     property_keywords = [
         "grundsalg", "byggegrunde", "parcelhusgrunde", "erhvervsgrunde",
         "grunde til salg", "ejendomme til salg", "storparceller",
-        "udstykning", "villagrunde", "boliggrunde"
+        "udstykning", "villagrunde", "boliggrunde", "udbud", "til salg",
+        "erhvervsgrund", "parcelhusgrund", "boliggrund"
     ]
     content_lower = content.lower()
-    if any(kw in content_lower for kw in property_keywords):
-        return True
+    matched_keywords = [kw for kw in property_keywords if kw in content_lower]
 
-    # Use AI for ambiguous cases
+    if matched_keywords:
+        result["is_relevant"] = True
+        result["confidence"] = min(0.5 + len(matched_keywords) * 0.1, 0.95)
+        result["category"] = "keyword_match"
+        result["reason"] = f"Matched keywords: {', '.join(matched_keywords[:3])}"
+        return result
+
+    # Filter out obvious non-property pages
+    skip_patterns = [
+        "kontakt", "cookie", "privatlivspolitik", "sitemap.xml",
+        "om kommunen", "borgerservice", "job i kommunen"
+    ]
+    if any(pattern in content_lower[:500] for pattern in skip_patterns):
+        result["reason"] = "Appears to be contact/policy page"
+        return result
+
+    # Use AI for ambiguous cases (loose filter - include anything potentially related)
     if not openai_client:
-        return False
+        # Without AI, be permissive
+        result["is_relevant"] = True
+        result["confidence"] = 0.3
+        result["reason"] = "No AI available, including by default"
+        return result
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Use cheaper model for classification
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You classify Danish municipal web pages. Answer only 'yes' or 'no'."},
-                {"role": "user", "content": f"Is this page about municipal property/land sales (grundsalg, byggegrunde, ejendomme til salg)? Content: {content[:2000]}"}
+                {"role": "system", "content": """You classify Danish municipal web pages. Output JSON only:
+{"is_relevant": true/false, "confidence": 0.0-1.0, "category": "land_sale"|"property_sale"|"tender"|"announcement"|"news"|"other", "reason": "brief explanation"}
+
+Use LOOSE filtering - include anything potentially related to:
+- Land/property for sale (grundsalg, byggegrunde, ejendomme)
+- Upcoming sales or tenders
+- Property development announcements
+- Area development plans with potential sales
+
+Only exclude clearly irrelevant pages (general news, contact info, policies)."""},
+                {"role": "user", "content": f"Classify this page (URL: {url}):\n\n{content[:2000]}"}
             ],
-            max_tokens=10
+            response_format={"type": "json_object"},
+            max_tokens=150
         )
-        answer = response.choices[0].message.content.strip().lower()
-        return answer == "yes" or answer == "ja"
+        result = json.loads(response.choices[0].message.content)
+        return result
     except Exception as e:
         print(f"Classification failed: {e}")
-        return False
+        # On error, be permissive (loose filter)
+        result["is_relevant"] = True
+        result["confidence"] = 0.2
+        result["reason"] = f"Classification error, including by default: {e}"
+        return result
+
+
+def is_property_related(url: str, content: str) -> bool:
+    """Legacy wrapper for classify_relevance - returns bool for backward compatibility."""
+    result = classify_relevance(url, content)
+    return result.get("is_relevant", False)
 
 def discover_kortinfo_urls(base_url: str, seen_urls: set) -> List[str]:
     """Extract property URLs from kortinfo sites via scrape (they're JavaScript SPAs)."""
@@ -231,29 +281,59 @@ def discover_new_urls(source: dict, seen_urls: set) -> List[str]:
         print(f"Firecrawl map failed for {base_url}: {e}")
         return []
 
-def extract_property_data(url: str) -> Optional[dict]:
+EXTRACTION_PROMPT = """You are analyzing a Danish municipality page about property/land sales (grundsalg).
+
+Extract the following as JSON:
+{
+  "is_actual_listing": boolean,  // Is this an actual property FOR SALE (not just info)?
+  "listing_type": "land" | "property" | "tender" | "announcement" | "unknown",
+  "status": "active" | "upcoming" | "sold" | "unknown",
+  "municipality": string,
+  "title": string,
+  "address": string | null,
+  "price": number | null,  // In DKK, just the number
+  "price_type": "fixed" | "minimum" | "negotiable" | "unknown",
+  "deadline": string | null,  // ISO date format if available (YYYY-MM-DD)
+  "area_m2": number | null,
+  "property_type": "parcelhusgrund" | "erhvervsgrund" | "storparcel" | "boliggrund" | "other",
+  "confidence": 0.0-1.0,  // How confident are you in this extraction?
+  "summary": string  // 1-2 sentence description in Danish
+}
+
+If this page is NOT about a specific property for sale, still extract what you can but set is_actual_listing to false.
+Language is Danish. Output JSON only."""
+
+
+def extract_property_data(url: str, pre_scraped_content: str = None) -> Optional[dict]:
     """Scrape and use AI to extract structured data from a listing URL."""
-    if not firecrawl or not openai_client:
+    if not openai_client:
         return None
 
-    print(f"Scraping and extracting from {url}...", flush=True)
-    try:
-        time.sleep(RATE_LIMIT_DELAY)  # Rate limit
-        scrape_result = firecrawl.scrape_url(url, params={"formats": ["markdown"]})
-        content = scrape_result.get("markdown", "")
-        
-        if not content:
+    # Use pre-scraped content if available (avoids double scraping)
+    content = pre_scraped_content
+    if not content and firecrawl:
+        print(f"Scraping and extracting from {url}...", flush=True)
+        try:
+            time.sleep(RATE_LIMIT_DELAY)  # Rate limit
+            scrape_result = firecrawl.scrape_url(url, params={"formats": ["markdown"]})
+            content = scrape_result.get("markdown", "")
+        except Exception as e:
+            print(f"Scrape failed for {url}: {e}")
             return None
 
+    if not content:
+        return None
+
+    try:
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a specialized assistant extracting Danish municipal property sale info (grundsalg). Output JSON only."},
-                {"role": "user", "content": f"Extract the following fields from this markdown content: municipality, title, description, price, deadline, address. If a field is missing, use null. Language is Danish. Content: {content}"}
+                {"role": "system", "content": EXTRACTION_PROMPT},
+                {"role": "user", "content": f"Extract property data from this page (URL: {url}):\n\n{content[:8000]}"}
             ],
             response_format={"type": "json_object"}
         )
-        
+
         data = json.loads(response.choices[0].message.content)
         data["url"] = url
         return data
@@ -262,67 +342,114 @@ def extract_property_data(url: str) -> Optional[dict]:
         return None
 
 def main():
-    print(f"Starting monitor run at {datetime.now(timezone.utc).isoformat()}")
-    
+    timestamp = datetime.now(timezone.utc).isoformat()
+    print(f"Starting monitor run at {timestamp}")
+
     # 1. Load context
     sources = get_sources()
     seen_urls = get_existing_urls()
-    
+
     if not sources:
         print("No sources found. Ensure 'sources' sheet exists and has URLs.")
-        # Log a heartbeat even if no sources
-        append_row("events", [datetime.now(timezone.utc).isoformat(), "system", "Run Summary", "No sources found"])
+        append_row("events", [timestamp, "system", "Run Summary", "No sources found", "", "", "", ""])
         return
 
-    # 2. Process each source
-    new_discoveries = []
+    # ============================================
+    # PHASE 1: Discovery - Find all new URLs
+    # ============================================
+    print(f"\n📡 Phase 1: Discovering new URLs from {len(sources)} sources...\n")
+    all_discoveries = []  # List of (source, url) tuples
+
     for source in sources:
-        potential_urls = discover_new_urls(source, seen_urls)
-        source_type = source.get("type", "municipality_subsection")
-        config = DISCOVERY_CONFIG.get(source_type, {})
+        new_urls = discover_new_urls(source, seen_urls)
 
-        for url in potential_urls:
-            # For news feed sites, classify before full extraction
-            if config.get("classify") and firecrawl:
-                try:
-                    time.sleep(RATE_LIMIT_DELAY)  # Rate limit
-                    preview = firecrawl.scrape_url(url, params={"formats": ["markdown"]})
-                    content = preview.get("markdown", "")
-                    if not is_property_related(url, content):
-                        print(f"  Skipping non-property page: {url}", flush=True)
-                        continue
-                except Exception as e:
-                    print(f"  Classification scrape failed: {e}", flush=True)
+        # Log each discovery to 'discoveries' tab (raw Firecrawl findings)
+        for url in new_urls:
+            append_row("discoveries", [
+                timestamp,
+                source.get("municipality", ""),
+                source.get("name", ""),
+                url,
+                source.get("type", "")
+            ])
+            all_discoveries.append((source, url))
 
-            data = extract_property_data(url)
-            if data:
-                # Append to events/results
-                row = [
-                    datetime.now(timezone.utc).isoformat(),
-                    source["municipality"],
-                    data.get("title"),
-                    data.get("address"),
-                    data.get("price"),
-                    data.get("deadline"),
-                    data.get("url"),
-                    "new_listing"
-                ]
-                append_row("events", row)
+    discovery_count = len(all_discoveries)
+    print(f"\n📊 Discovery complete: Found {discovery_count} new URLs")
 
-                # Mark as seen
-                append_row("seen_urls", [url, datetime.now(timezone.utc).isoformat()])
-                seen_urls.add(url)
-                new_discoveries.append(url)
+    # ============================================
+    # PHASE 2: AI Analysis (only if new URLs found)
+    # ============================================
+    if not all_discoveries:
+        summary = f"Processed {len(sources)} sources. No new URLs found - AI analysis skipped."
+        append_row("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""])
+        print(f"\n✅ {summary}")
+        return
 
-    # 3. Final heartbeat/summary
-    summary = f"Processed {len(sources)} sources. Found {len(new_discoveries)} new listings."
-    append_row("events", [
-        datetime.now(timezone.utc).isoformat(),
-        "system",
-        "Run Summary",
-        summary
-    ])
-    print(f"✅ {summary}")
+    print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
+
+    proposals_count = 0
+    skipped_count = 0
+
+    for source, url in all_discoveries:
+        # Scrape content once for both classification and extraction
+        content = None
+        if firecrawl:
+            try:
+                time.sleep(RATE_LIMIT_DELAY)
+                scrape_result = firecrawl.scrape_url(url, params={"formats": ["markdown"]})
+                content = scrape_result.get("markdown", "")
+            except Exception as e:
+                print(f"  Scrape failed for {url}: {e}", flush=True)
+                continue
+
+        # Classify relevance (loose filter)
+        classification = classify_relevance(url, content or "")
+
+        if not classification.get("is_relevant", False):
+            print(f"  ⏭️ Skipping (not relevant): {url} - {classification.get('reason', '')}", flush=True)
+            skipped_count += 1
+            # Still mark as seen to avoid re-processing
+            append_row("seen_urls", [url, timestamp])
+            seen_urls.add(url)
+            continue
+
+        print(f"  ✓ Relevant ({classification.get('category', 'unknown')}): {url}", flush=True)
+
+        # Extract structured data (reuse scraped content)
+        data = extract_property_data(url, pre_scraped_content=content)
+
+        if data:
+            # Log to 'proposals' tab with enriched data
+            row = [
+                timestamp,
+                source.get("municipality", ""),
+                data.get("title", ""),
+                data.get("address", ""),
+                data.get("price", ""),
+                data.get("deadline", ""),
+                url,
+                data.get("listing_type", "unknown"),
+                data.get("status", "unknown"),
+                data.get("area_m2", ""),
+                data.get("property_type", ""),
+                data.get("confidence", 0),
+                data.get("is_actual_listing", False),
+                data.get("summary", "")
+            ]
+            append_row("proposals", row)
+            proposals_count += 1
+
+        # Mark as seen
+        append_row("seen_urls", [url, timestamp])
+        seen_urls.add(url)
+
+    # ============================================
+    # PHASE 3: Summary
+    # ============================================
+    summary = f"Processed {len(sources)} sources. Discovered {discovery_count} URLs → {proposals_count} proposals. Skipped: {skipped_count} (not relevant)."
+    append_row("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""])
+    print(f"\n✅ {summary}")
 
 if __name__ == "__main__":
     main()
