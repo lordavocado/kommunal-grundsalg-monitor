@@ -281,27 +281,52 @@ def discover_new_urls(source: dict, seen_urls: set) -> List[str]:
         print(f"Firecrawl map failed for {base_url}: {e}")
         return []
 
-EXTRACTION_PROMPT = """You are analyzing a Danish municipality page about property/land sales (grundsalg).
-
-Extract the following as JSON:
+EXTRACTION_PROMPT = """Analyze this Danish municipality page. Output JSON:
 {
-  "is_actual_listing": boolean,  // Is this an actual property FOR SALE (not just info)?
-  "listing_type": "land" | "property" | "tender" | "announcement" | "unknown",
-  "status": "active" | "upcoming" | "sold" | "unknown",
-  "municipality": string,
-  "title": string,
-  "address": string | null,
-  "price": number | null,  // In DKK, just the number
-  "price_type": "fixed" | "minimum" | "negotiable" | "unknown",
-  "deadline": string | null,  // ISO date format if available (YYYY-MM-DD)
-  "area_m2": number | null,
-  "property_type": "parcelhusgrund" | "erhvervsgrund" | "storparcel" | "boliggrund" | "other",
-  "confidence": 0.0-1.0,  // How confident are you in this extraction?
-  "summary": string  // 1-2 sentence description in Danish
+  "is_property_listing": boolean,  // Is this about property/land for sale or development?
+  "confidence": 0.0-1.0,           // How confident are you?
+  "title": string,                 // Brief title
+  "municipality": string,          // Which kommune?
+  "summary": string                // 1-2 sentence description in Danish
 }
 
-If this page is NOT about a specific property for sale, still extract what you can but set is_actual_listing to false.
+Set is_property_listing=true if this is about: grundsalg, byggegrunde, parcelhusgrunde, erhvervsgrunde, ejendomme til salg, or any property/land sale announcement.
 Language is Danish. Output JSON only."""
+
+
+def send_slack_notification(message: str, proposals: list = None):
+    """Send notification to Slack when new proposals are found."""
+    import requests
+
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        print("SLACK_WEBHOOK_URL not set, skipping Slack notification")
+        return
+
+    # For Slack Workflow Builder, we send structured data
+    payload = {
+        "message": message,
+        "proposals_count": len(proposals) if proposals else 0,
+        "details": ""
+    }
+
+    if proposals:
+        # Format proposals as bullet list
+        details_lines = []
+        for p in proposals[:10]:  # Limit to 10 in message
+            conf = p.get('confidence', 0)
+            conf_str = f"{int(conf * 100)}%" if isinstance(conf, (int, float)) else str(conf)
+            details_lines.append(
+                f"* {p.get('municipality', 'Unknown')}: {p.get('title', 'Untitled')} ({conf_str} confidence)\n  {p.get('url', '')}"
+            )
+        payload["details"] = "\n".join(details_lines)
+
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        response.raise_for_status()
+        print("Slack notification sent successfully")
+    except Exception as e:
+        print(f"Slack notification failed: {e}")
 
 
 def extract_property_data(url: str, pre_scraped_content: str = None) -> Optional[dict]:
@@ -390,6 +415,7 @@ def main():
 
     proposals_count = 0
     skipped_count = 0
+    proposals_list = []  # Collect for Slack notification
 
     for source, url in all_discoveries:
         # Scrape content once for both classification and extraction
@@ -420,36 +446,43 @@ def main():
         data = extract_property_data(url, pre_scraped_content=content)
 
         if data:
-            # Log to 'proposals' tab with enriched data
+            # Simplified proposals row: timestamp, municipality, title, url, confidence, summary
             row = [
                 timestamp,
                 source.get("municipality", ""),
                 data.get("title", ""),
-                data.get("address", ""),
-                data.get("price", ""),
-                data.get("deadline", ""),
                 url,
-                data.get("listing_type", "unknown"),
-                data.get("status", "unknown"),
-                data.get("area_m2", ""),
-                data.get("property_type", ""),
                 data.get("confidence", 0),
-                data.get("is_actual_listing", False),
                 data.get("summary", "")
             ]
             append_row("proposals", row)
             proposals_count += 1
+
+            # Collect for Slack notification
+            proposals_list.append({
+                "municipality": source.get("name", source.get("municipality", "")),
+                "title": data.get("title", "Untitled"),
+                "url": url,
+                "confidence": data.get("confidence", 0)
+            })
 
         # Mark as seen
         append_row("seen_urls", [url, timestamp])
         seen_urls.add(url)
 
     # ============================================
-    # PHASE 3: Summary
+    # PHASE 3: Summary + Slack Notification
     # ============================================
     summary = f"Processed {len(sources)} sources. Discovered {discovery_count} URLs → {proposals_count} proposals. Skipped: {skipped_count} (not relevant)."
     append_row("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""])
     print(f"\n✅ {summary}")
+
+    # Send Slack notification if we found proposals
+    if proposals_count > 0:
+        send_slack_notification(
+            f"🏠 Grundsalg Monitor: Found {proposals_count} new property listings today!",
+            proposals_list
+        )
 
 if __name__ == "__main__":
     main()
