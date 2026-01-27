@@ -1,0 +1,219 @@
+# Firecrawl API Guide (Resights Prototype)
+
+## What Firecrawl Is
+Firecrawl is a web data API that converts websites into clean, LLM-ready content.  
+It handles dynamic pages, PDFs, proxies, caching, and more, making it suitable for large-scale monitoring of heterogeneous public websites.
+
+This guide focuses on how Resights can use Firecrawl to monitor Danish municipality websites for Grundsalg signals.
+
+---
+
+## Authentication
+
+All Firecrawl API requests use Bearer token authentication:
+
+Authorization: Bearer <FIRECRAWL_API_KEY>
+
+
+---
+
+## Core Concepts
+
+Firecrawl provides multiple endpoints depending on your goal:
+
+- **Map**: discover URLs on a site (fast, cheap, ideal for monitoring)
+- **Scrape**: extract clean content from a single page
+- **Crawl**: recursively crawl multiple pages (async job)
+- **Extract**: structured extraction across multiple URLs
+- **Search**: web search + optional scraping
+
+For Grundsalg monitoring, the recommended pattern is:
+
+> Map → Diff → Scrape → LLM → Log → Alert
+
+---
+
+# 1) Map Endpoint — URL Discovery
+
+### Purpose
+Discover most URLs on a website and optionally prioritize results using a search query.
+
+This is ideal for daily monitoring because it is fast and lightweight.
+
+### Endpoint
+POST https://api.firecrawl.dev/v2/map
+
+
+### Example Request
+
+```bash
+curl -X POST "https://api.firecrawl.dev/v2/map" \
+  -H "Authorization: Bearer $FIRECRAWL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://www.aalborg.dk",
+    "search": "grundsalg udbud salg af ejendom byggegrund erhvervsgrund",
+    "sitemap": "include",
+    "includeSubdomains": true,
+    "ignoreQueryParameters": true,
+    "limit": 500,
+    "timeout": 60000
+  }'
+Typical Response
+{
+  "success": true,
+  "links": [
+    {
+      "url": "https://www.aalborg.dk/grundsalg/example",
+      "title": "Grundsalg i Aalborg",
+      "description": "..."
+    }
+  ]
+}
+Recommended Use in Resights
+Run daily for each municipality root URL.
+
+Compare returned URLs with seen_urls.
+
+Treat new URLs as candidates for further analysis.
+
+2) Scrape Endpoint — Page Extraction
+Purpose
+Extract clean content from a single URL in formats such as Markdown, HTML, links, or structured JSON.
+
+Endpoint
+POST https://api.firecrawl.dev/v2/scrape
+Example Request
+curl -X POST "https://api.firecrawl.dev/v2/scrape" \
+  -H "Authorization: Bearer $FIRECRAWL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example-municipality.dk/grundsalg/post",
+    "formats": ["markdown", "links"],
+    "onlyMainContent": true,
+    "timeout": 30000
+  }'
+Typical Response Fields
+data.markdown — cleaned page text (best for LLMs)
+
+data.links — outgoing links
+
+data.metadata — title, status code, etc.
+
+Recommended Use in Resights
+Run only on URLs detected as new or relevant.
+
+Pass markdown to OpenAI / Gemini for structured extraction.
+
+3) Crawl Endpoint — Deep Crawling (Async)
+Purpose
+Recursively crawl many pages starting from a root URL.
+
+When to Use
+When Map misses relevant pages.
+
+When you need a deeper site traversal.
+
+For initial backfills.
+
+Endpoint
+POST https://api.firecrawl.dev/v2/crawl
+Example Request
+curl -X POST "https://api.firecrawl.dev/v2/crawl" \
+  -H "Authorization: Bearer $FIRECRAWL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://www.aalborg.dk",
+    "limit": 200,
+    "sitemap": "include",
+    "scrapeOptions": {
+      "formats": ["markdown", "links"],
+      "onlyMainContent": true
+    }
+  }'
+Check Crawl Status
+GET https://api.firecrawl.dev/v2/crawl/{crawl_id}
+Notes
+Crawl is asynchronous.
+
+Results may be chunked/paginated.
+
+Use sparingly in daily monitoring (cost + latency).
+
+4) Extract Endpoint — Structured Extraction
+Purpose
+Provide URLs + schema/prompt and let Firecrawl extract structured data.
+
+Endpoint
+POST https://api.firecrawl.dev/v2/extract
+Use Case
+Bulk structured extraction.
+
+Alternative to running your own LLM pipeline.
+
+Recommendation for Resights
+Prefer:
+
+Scrape → OpenAI/Gemini
+for better prompt control and iteration.
+
+5) Search Endpoint — Web Search + Scrape
+Purpose
+Search the web and optionally scrape results.
+
+Endpoint
+POST https://api.firecrawl.dev/v2/search
+Use Case
+Discover new municipality sources.
+
+Explore unknown domains.
+
+Not required for the core Grundsalg monitoring pipeline.
+
+Recommended Architecture for Grundsalg Monitoring
+Daily Pipeline
+Map municipality websites (Firecrawl /map)
+
+Diff URLs vs seen_urls
+
+Scrape new URLs (/scrape)
+
+LLM extraction (OpenAI / Gemini)
+
+Log structured results (Google Sheets / DB)
+
+Send notifications (Slack / Email)
+
+Suggested Keyword Set (Danish Grundsalg)
+grundsalg
+udbud
+salg af ejendom
+fast ejendom
+byggegrund
+erhvervsgrund
+til salg
+budrunde
+auktion
+matrikel
+Practical Tips
+Performance
+Use /map daily (fast, cheap).
+
+Use /crawl only for difficult sites.
+
+Limit scrape calls with deduplication.
+
+Reliability
+Handle HTTP 429 (rate limits) with retries.
+
+Set timeouts.
+
+Log failures per municipality.
+
+Iteration Strategy
+Start broad → tighten filters based on false positives.
+
+Resights-Specific Insight
+Firecrawl + LLMs enables Resights to transform unstructured municipal content into structured real estate signals.
+
+This project is not only a crawler, but an experiment in building a scalable “Municipal Signal Engine”.

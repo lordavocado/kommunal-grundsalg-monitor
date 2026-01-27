@@ -10,6 +10,8 @@ from sheets import append_row, get_rows
 
 # Rate limiting: Firecrawl free tier = 15 req/min, so ~4 seconds between requests
 RATE_LIMIT_DELAY = 4.5  # seconds between Firecrawl API calls
+RETRY_DELAY = 5  # seconds to wait before retrying a failed request
+MAX_RETRIES = 1  # number of retries for transient failures
 
 # Load environment variables from env.local
 load_dotenv('env.local')
@@ -50,6 +52,40 @@ DISCOVERY_CONFIG = {
 # Init clients
 firecrawl = FirecrawlApp(api_key=FIRECRAWL_API_KEY) if FIRECRAWL_API_KEY else None
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+
+def scrape_with_retry(url: str, params: dict = None) -> tuple[Optional[dict], Optional[str]]:
+    """
+    Scrape URL with retry logic for transient failures.
+    Returns: (result_dict, error_message) - one will be None
+    """
+    if not firecrawl:
+        return None, "Firecrawl not initialized"
+
+    params = params or {"formats": ["markdown"]}
+    last_error = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            time.sleep(RATE_LIMIT_DELAY)
+            result = firecrawl.scrape_url(url, params=params)
+            return result, None
+        except Exception as e:
+            last_error = str(e)
+            if attempt < MAX_RETRIES:
+                print(f"  Retry {attempt + 1}/{MAX_RETRIES} for {url}...")
+                time.sleep(RETRY_DELAY)
+
+    return None, last_error
+
+
+def log_failure(timestamp: str, url: str, source_id: str, failure_type: str, error_message: str):
+    """Log a failure to the failures tab in Google Sheets."""
+    try:
+        append_row("failures", [timestamp, url, source_id, failure_type, error_message])
+    except Exception as e:
+        print(f"  Warning: Could not log failure to sheets: {e}")
+
 
 def get_existing_urls() -> set:
     """Fetch already processed URLs from the 'seen_urls' sheet."""
@@ -294,8 +330,8 @@ Set is_property_listing=true if this is about: grundsalg, byggegrunde, parcelhus
 Language is Danish. Output JSON only."""
 
 
-def send_slack_notification(message: str, proposals: list = None):
-    """Send notification to Slack when new proposals are found."""
+def send_slack_notification(message: str, proposals: list = None, stats: dict = None):
+    """Send notification to Slack when new proposals are found or failures occur."""
     import requests
 
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
@@ -310,16 +346,30 @@ def send_slack_notification(message: str, proposals: list = None):
         "details": ""
     }
 
+    details_lines = []
+
+    # Add proposals section if any
     if proposals:
-        # Format proposals as bullet list
-        details_lines = []
         for p in proposals[:10]:  # Limit to 10 in message
             conf = p.get('confidence', 0)
             conf_str = f"{int(conf * 100)}%" if isinstance(conf, (int, float)) else str(conf)
             details_lines.append(
-                f"* {p.get('municipality', 'Unknown')}: {p.get('title', 'Untitled')} ({conf_str} confidence)\n  {p.get('url', '')}"
+                f"• {p.get('municipality', 'Unknown')}: {p.get('title', 'Untitled')} ({conf_str} confidence)\n  {p.get('url', '')}"
             )
-        payload["details"] = "\n".join(details_lines)
+
+    # Add failures section if any
+    if stats:
+        total_failures = len(stats.get("scrape_failed", [])) + len(stats.get("extraction_failed", []))
+        if total_failures > 0:
+            details_lines.append(f"\n❌ Failures ({total_failures}):")
+            for fail in stats.get("scrape_failed", [])[:5]:
+                details_lines.append(f"  • Scrape: {fail['url'][:60]}...")
+            for fail in stats.get("extraction_failed", [])[:5]:
+                details_lines.append(f"  • Extract: {fail['url'][:60]}...")
+            if total_failures > 10:
+                details_lines.append(f"  ... and {total_failures - 10} more")
+
+    payload["details"] = "\n".join(details_lines)
 
     try:
         response = requests.post(webhook_url, json=payload, timeout=10)
@@ -370,6 +420,21 @@ def main():
     timestamp = datetime.now(timezone.utc).isoformat()
     print(f"Starting monitor run at {timestamp}")
 
+    # Initialize stats for reliability tracking
+    stats = {
+        "sources_processed": 0,
+        "urls_discovered": 0,
+        "urls_attempted": 0,
+        "scrape_success": 0,
+        "scrape_failed": [],       # List of {"url": ..., "source_id": ..., "error": ...}
+        "classification_success": 0,
+        "classification_failed": [],
+        "extraction_success": 0,
+        "extraction_failed": [],
+        "proposals_created": 0,
+        "skipped_irrelevant": 0,
+    }
+
     # 1. Load context
     sources = get_sources()
     seen_urls = get_existing_urls()
@@ -386,6 +451,7 @@ def main():
     all_discoveries = []  # List of (source, url) tuples
 
     for source in sources:
+        stats["sources_processed"] += 1
         new_urls = discover_new_urls(source, seen_urls)
 
         # Log each discovery to 'discoveries' tab (raw Firecrawl findings)
@@ -398,6 +464,7 @@ def main():
                 source.get("type", "")
             ])
             all_discoveries.append((source, url))
+            stats["urls_discovered"] += 1
 
     discovery_count = len(all_discoveries)
     print(f"\n📊 Discovery complete: Found {discovery_count} new URLs")
@@ -413,29 +480,44 @@ def main():
 
     print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
 
-    proposals_count = 0
-    skipped_count = 0
     proposals_list = []  # Collect for Slack notification
 
     for source, url in all_discoveries:
-        # Scrape content once for both classification and extraction
-        content = None
-        if firecrawl:
-            try:
-                time.sleep(RATE_LIMIT_DELAY)
-                scrape_result = firecrawl.scrape_url(url, params={"formats": ["markdown"]})
-                content = scrape_result.get("markdown", "")
-            except Exception as e:
-                print(f"  Scrape failed for {url}: {e}", flush=True)
-                continue
+        stats["urls_attempted"] += 1
+        source_id = source.get("municipality", "unknown")
+
+        # Scrape content with retry logic
+        scrape_result, scrape_error = scrape_with_retry(url, {"formats": ["markdown"]})
+
+        if scrape_error:
+            print(f"  ❌ Scrape FAILED for {url}: {scrape_error}", flush=True)
+            stats["scrape_failed"].append({"url": url, "source_id": source_id, "error": scrape_error})
+            log_failure(timestamp, url, source_id, "scrape_failed", scrape_error)
+            # Still mark as seen to avoid re-processing
+            append_row("seen_urls", [url, timestamp])
+            seen_urls.add(url)
+            continue
+
+        stats["scrape_success"] += 1
+        content = scrape_result.get("markdown", "") if scrape_result else ""
 
         # Classify relevance (loose filter)
-        classification = classify_relevance(url, content or "")
+        try:
+            classification = classify_relevance(url, content)
+            stats["classification_success"] += 1
+        except Exception as e:
+            print(f"  ❌ Classification FAILED for {url}: {e}", flush=True)
+            stats["classification_failed"].append({"url": url, "source_id": source_id, "error": str(e)})
+            log_failure(timestamp, url, source_id, "classification_failed", str(e))
+            # Still mark as seen
+            append_row("seen_urls", [url, timestamp])
+            seen_urls.add(url)
+            continue
 
         if not classification.get("is_relevant", False):
             print(f"  ⏭️ Skipping (not relevant): {url} - {classification.get('reason', '')}", flush=True)
-            skipped_count += 1
-            # Still mark as seen to avoid re-processing
+            stats["skipped_irrelevant"] += 1
+            # Mark as seen to avoid re-processing
             append_row("seen_urls", [url, timestamp])
             seen_urls.add(url)
             continue
@@ -443,9 +525,20 @@ def main():
         print(f"  ✓ Relevant ({classification.get('category', 'unknown')}): {url}", flush=True)
 
         # Extract structured data (reuse scraped content)
-        data = extract_property_data(url, pre_scraped_content=content)
+        try:
+            data = extract_property_data(url, pre_scraped_content=content)
+        except Exception as e:
+            print(f"  ❌ Extraction FAILED for {url}: {e}", flush=True)
+            stats["extraction_failed"].append({"url": url, "source_id": source_id, "error": str(e)})
+            log_failure(timestamp, url, source_id, "extraction_failed", str(e))
+            append_row("seen_urls", [url, timestamp])
+            seen_urls.add(url)
+            continue
 
         if data:
+            stats["extraction_success"] += 1
+            stats["proposals_created"] += 1
+
             # Simplified proposals row: timestamp, municipality, title, url, confidence, summary
             row = [
                 timestamp,
@@ -456,7 +549,6 @@ def main():
                 data.get("summary", "")
             ]
             append_row("proposals", row)
-            proposals_count += 1
 
             # Collect for Slack notification
             proposals_list.append({
@@ -465,6 +557,10 @@ def main():
                 "url": url,
                 "confidence": data.get("confidence", 0)
             })
+        else:
+            # Extraction returned None (failed internally)
+            stats["extraction_failed"].append({"url": url, "source_id": source_id, "error": "Extraction returned None"})
+            log_failure(timestamp, url, source_id, "extraction_failed", "Extraction returned None")
 
         # Mark as seen
         append_row("seen_urls", [url, timestamp])
@@ -473,16 +569,38 @@ def main():
     # ============================================
     # PHASE 3: Summary + Slack Notification
     # ============================================
-    summary = f"Processed {len(sources)} sources. Discovered {discovery_count} URLs → {proposals_count} proposals. Skipped: {skipped_count} (not relevant)."
+    total_failures = len(stats["scrape_failed"]) + len(stats["classification_failed"]) + len(stats["extraction_failed"])
+
+    # Build detailed summary
+    summary_parts = [
+        f"Processed {stats['sources_processed']} sources",
+        f"Discovered {stats['urls_discovered']} URLs",
+        f"Scraped {stats['scrape_success']}/{stats['urls_attempted']} ({len(stats['scrape_failed'])} failed)",
+        f"Proposals: {stats['proposals_created']}",
+        f"Skipped: {stats['skipped_irrelevant']} (not relevant)",
+    ]
+    if total_failures > 0:
+        summary_parts.append(f"⚠️ Total failures: {total_failures}")
+
+    summary = " | ".join(summary_parts)
     append_row("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""])
     print(f"\n✅ {summary}")
 
-    # Send Slack notification if we found proposals
-    if proposals_count > 0:
-        send_slack_notification(
-            f"🏠 Grundsalg Monitor: Found {proposals_count} new property listings today!",
-            proposals_list
-        )
+    # Print failure breakdown if any
+    if total_failures > 0:
+        print(f"\n⚠️ Failure breakdown:")
+        print(f"   Scrape failures: {len(stats['scrape_failed'])}")
+        print(f"   Classification failures: {len(stats['classification_failed'])}")
+        print(f"   Extraction failures: {len(stats['extraction_failed'])}")
+
+    # Send Slack notification if we found proposals OR had failures
+    if stats["proposals_created"] > 0 or total_failures > 0:
+        if total_failures > 0:
+            message = f"🏠 Grundsalg Monitor: {stats['proposals_created']} proposals, ❌ {total_failures} failures"
+        else:
+            message = f"🏠 Grundsalg Monitor: Found {stats['proposals_created']} new property listings today!"
+
+        send_slack_notification(message, proposals_list, stats)
 
 if __name__ == "__main__":
     main()
