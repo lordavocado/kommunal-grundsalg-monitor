@@ -8,6 +8,54 @@ This guide focuses on how Resights can use Firecrawl to monitor Danish municipal
 
 ---
 
+## Firecrawl CLI & Skill
+
+Firecrawl now ships a CLI plus an installable "Skill" so AI agents (Claude Code, Antigravity, OpenCode, etc.) can run Firecrawl commands directly. This is useful for:
+
+- Quick manual spot-checks of municipalities without wiring new Python
+- Verifying a new crawling idea locally before updating `monitor.py`
+- Letting Claude Code execute `firecrawl` commands inside workspaces when iterating on prompts or parsing logic
+
+### Documentation Index
+- Start from <https://docs.firecrawl.dev/llms.txt> to locate any CLI/agent doc quickly.
+
+### Installation
+```bash
+npm install -g firecrawl-cli   # global CLI install
+npx skills add firecrawl/cli   # optional: add Skill so supported agents auto-configure
+```
+After installing the Skill, restart Claude Code (or any supported agent) so it discovers Firecrawl.
+
+### Authentication & Status
+```bash
+firecrawl login                 # interactive login
+firecrawl login --browser       # browser-based auth (agent-friendly)
+firecrawl login --api-key fc-XXX
+export FIRECRAWL_API_KEY=fc-XXX # env var auth
+firecrawl config                # view current CLI config
+firecrawl --status              # confirm version, auth, credits, concurrency
+```
+
+### Core CLI Commands
+- `firecrawl <url>` or `firecrawl scrape <url>` — Scrape a single page (`--only-main-content`, `--format markdown,links`, `--wait-for`, screenshots, include/exclude tags, pretty JSON, file output).
+- `firecrawl search "query"` — Search the web/news/images with filters (`--limit`, `--sources`, `--categories`, `--tbs`, `--location`, `--scrape`, `--scrape-formats`).
+- `firecrawl map <url>` — Discover URLs with filters (`--search`, `--sitemap include|skip|only`, `--include-subdomains`, `--limit`, `--ignore-query-parameters`).
+- `firecrawl crawl <url>` — Run async crawls with depth/path/rate controls (`--wait`, `--progress`, `--limit`, `--max-depth`, `--include-paths`, `--delay`, `--max-concurrency`).
+- `firecrawl credit-usage` — Inspect credit consumption (`--json --pretty`).
+- `firecrawl version` / `--version` — Show CLI version; `--help` / `-h` works for every subcommand. Global `--api-key` overrides stored credentials.
+
+CLI output streams to stdout, so pipe to `head`, `jq`, or `tee` as needed. Multiple formats return JSON; single formats return raw markdown/HTML for easy diffing.
+
+### How We Can Use the CLI
+- **Fast validation**: Run `firecrawl map <municipality>` during development to confirm Firecrawl still reaches the sections our automation depends on.
+- **Exploratory research**: Use `firecrawl search "grundsalg <region>" --scrape` when onboarding a new municipality to surface candidate URLs before updating `sources.json`.
+- **Agent workflows**: Claude Code can call `firecrawl` directly via the Skill when debugging scraping prompts, letting us keep context inside the IDE without switching terminals.
+- **Diagnostics**: `firecrawl --status` surfaces concurrency and credit headroom before long runs, which helps planning GitHub Actions usage.
+
+Telemetry is opt-in during auth only (CLI version/OS/tool fingerprint). Disable via `export FIRECRAWL_NO_TELEMETRY=1` if desired.
+
+---
+
 ## Authentication
 
 All Firecrawl API requests use Bearer token authentication:

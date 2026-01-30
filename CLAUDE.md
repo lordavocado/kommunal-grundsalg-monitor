@@ -29,6 +29,10 @@ export SLACK_WEBHOOK_URL=<url>  # Optional
 python monitor.py
 ```
 
+### Firecrawl CLI Skill
+- Claude Code can run Firecrawl directly via the official CLI/Skill combo. Install globally with `npm install -g firecrawl-cli`, then run `npx skills add firecrawl/cli` inside the Claude environment and restart Claude Code so it registers the new capability. Reference docs live at <https://docs.firecrawl.dev/llms.txt>.
+- Use the CLI for ad-hoc `firecrawl map <url>` validations, to run `firecrawl search "grundsalg <municipality>" --scrape` when scouting new sources, or to double-check credits with `firecrawl --status` before long sessions.
+
 ### Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|
