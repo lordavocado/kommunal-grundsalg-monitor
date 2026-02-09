@@ -199,7 +199,7 @@ Create a Google Sheet with these tabs:
 | Tab | Columns |
 |-----|---------|
 | `discoveries` | timestamp, source_id, source_name, url, source_type |
-| `proposals` | timestamp, municipality, title, url, confidence, summary |
+| `proposals` | timestamp, municipality, title, url, confidence, summary, published_date |
 | `seen_urls` | url, timestamp |
 | `events` | timestamp, type, title, description, col5, col6, col7, col8 |
 | `failures` | timestamp, url, source_id, failure_type, error_message |

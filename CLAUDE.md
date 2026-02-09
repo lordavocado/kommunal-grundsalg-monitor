@@ -46,6 +46,218 @@ python monitor.py
 - **Manual trigger:** workflow_dispatch available
 - **Secrets required:** `FIRECRAWL_API_KEY`, `OPENAI_API_KEY`, `SHEETS_WEBAPP_URL`, `SLACK_WEBHOOK_URL`
 
+## Feature Development Workflow
+
+**CRITICAL: When starting ANY new feature or non-trivial implementation, you MUST use the AskUserQuestion tool to conduct an in-depth requirements discovery session BEFORE writing any code.**
+
+### Requirements Discovery Process
+
+1. **Always Start with AskUserQuestion**
+   - Do NOT make assumptions about implementation details
+   - Do NOT skip to coding based on a brief request
+   - Use AskUserQuestion to gather comprehensive requirements
+
+2. **Interview Depth & Coverage**
+
+   Ask probing questions across ALL relevant dimensions:
+
+   **Technical Implementation:**
+   - What existing systems/patterns should this integrate with?
+   - Are there performance constraints or scalability concerns?
+   - What data persistence strategy makes sense?
+   - Should this be synchronous or asynchronous?
+   - What error handling and recovery mechanisms are needed?
+   - Are there backward compatibility requirements?
+   - What logging/monitoring should be included?
+
+   **Architecture & Design:**
+   - Where should this live in the codebase?
+   - Should this be a new module or extend existing functionality?
+   - What abstraction level is appropriate?
+   - Are there reusability considerations?
+   - How should this interact with the current pipeline?
+   - What dependencies should we introduce (if any)?
+
+   **User Experience & Interface:**
+   - Who will interact with this feature? (end users, developers, CI/CD)
+   - What does success look like from a UX perspective?
+   - Should there be configuration options? How exposed?
+   - What feedback/output should users see?
+   - Are there accessibility considerations?
+
+   **Data & State:**
+   - What data needs to be stored, and where?
+   - What's the data lifecycle (creation, updates, deletion)?
+   - Are there privacy or data retention concerns?
+   - Should data be cached? For how long?
+   - What happens to existing data?
+
+   **Edge Cases & Failure Modes:**
+   - What could go wrong?
+   - How should the system behave during failures?
+   - What are the rollback strategies?
+   - Are there race conditions to consider?
+   - What validation is needed?
+
+   **Tradeoffs & Alternatives:**
+   - What are the alternative approaches?
+   - What are the pros/cons of each?
+   - What are we optimizing for? (speed, cost, reliability, maintainability)
+   - What technical debt might this introduce?
+   - What's the migration path if we need to change this later?
+
+   **Cost & Resource Impact:**
+   - Will this increase API costs? By how much?
+   - What's the computational cost?
+   - Does this affect rate limits?
+   - Are there storage implications?
+
+   **Testing & Validation:**
+   - How will we test this?
+   - What does "done" look like?
+   - Are there metrics to track?
+   - What manual testing is needed?
+
+3. **Question Quality Guidelines**
+
+   **DO:**
+   - Ask about non-obvious tradeoffs
+   - Explore "why" behind the request
+   - Present informed options with context
+   - Ask follow-up questions based on previous answers
+   - Challenge assumptions constructively
+   - Ask about constraints and requirements
+
+   **DON'T:**
+   - Ask obvious questions like "Should I write tests?" (always yes)
+   - Ask permission to do standard practices
+   - Present false dichotomies
+   - Ask questions you can infer from codebase context
+   - Ask the same question in different words
+
+4. **Iterative Discovery**
+   - Use AskUserQuestion multiple times
+   - Each answer should inform the next question
+   - Continue until you have a complete mental model
+   - Don't rush to implementation
+
+5. **Specification Document**
+
+   After gathering requirements, write a comprehensive spec to a file (e.g., `specs/feature-name.md`):
+
+   ```markdown
+   # Feature: [Name]
+
+   ## Overview
+   [Brief description and motivation]
+
+   ## Requirements
+   ### Functional
+   - [Specific requirement 1]
+   - [Specific requirement 2]
+
+   ### Non-Functional
+   - Performance: [targets]
+   - Cost: [budget]
+   - Reliability: [SLA]
+
+   ## Technical Design
+   ### Architecture
+   [Component diagram or description]
+
+   ### Data Model
+   [Schema changes, new fields, etc.]
+
+   ### API/Interface
+   [New functions, parameters, returns]
+
+   ## Implementation Plan
+   1. [Step 1]
+   2. [Step 2]
+
+   ## Tradeoffs & Decisions
+   - Decision: [Choice made]
+     - Alternatives considered: [A, B, C]
+     - Rationale: [Why this choice]
+
+   ## Testing Strategy
+   - Unit tests: [Coverage areas]
+   - Integration tests: [Scenarios]
+   - Manual testing: [Steps]
+
+   ## Risks & Mitigations
+   - Risk: [Potential issue]
+     - Mitigation: [How to handle]
+
+   ## Cost Impact
+   [Estimated costs from API usage, storage, etc.]
+
+   ## Rollout Plan
+   [How to deploy, rollback strategy]
+   ```
+
+6. **Get Final Approval**
+   - Present the spec to the user
+   - Use AskUserQuestion one final time to confirm the approach
+   - Only after approval, proceed to implementation
+
+### Example Session Flow
+
+```
+User: "I want to add email notifications"
+
+❌ WRONG:
+Claude: I'll add email notifications using SendGrid...
+[starts coding]
+
+✅ CORRECT:
+Claude: I'll gather requirements for the email notification feature.
+[Uses AskUserQuestion with 3-4 questions about:]
+- Who should receive emails? (admins, property owners, subscribers?)
+- When should emails be sent? (every discovery, daily digest, on-demand?)
+- What email service constraints exist? (cost, volume limits, deliverability)
+- How should we handle failures and retries?
+
+[User answers]
+
+Claude: Based on your answers, I have follow-up questions...
+[Uses AskUserQuestion again with 2-3 questions about:]
+- Should emails be templated? What information should they contain?
+- Do we need unsubscribe functionality?
+- What about rate limiting to avoid spam flags?
+
+[User answers]
+
+Claude: Let me confirm the technical approach...
+[Uses AskUserQuestion to present 2-3 architecture options:]
+- Option A: Integrate SendGrid directly
+- Option B: Use Slack webhooks to forward to email
+- Option C: Google Apps Script email forwarding
+Each with pros/cons
+
+[User selects approach]
+
+Claude: I'll now write a specification document.
+[Writes detailed spec to specs/email-notifications.md]
+
+Claude: I've created the specification. Please review...
+[Uses AskUserQuestion for final approval]
+
+[User approves]
+
+Claude: Starting implementation...
+```
+
+### When to Skip This Process
+
+Only skip the detailed AskUserQuestion workflow for:
+- Trivial bug fixes (typos, obvious errors)
+- Explicit user instructions with all details provided
+- Maintenance tasks (dependency updates, etc.)
+- Documentation-only changes
+
+For everything else, **ALWAYS** conduct thorough requirements discovery.
+
 ## Architecture
 
 ### Processing Pipeline

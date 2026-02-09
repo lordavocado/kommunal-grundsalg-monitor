@@ -13,6 +13,10 @@ RATE_LIMIT_DELAY = 4.5  # seconds between Firecrawl API calls
 RETRY_DELAY = 5  # seconds to wait before retrying a failed request
 MAX_RETRIES = 1  # number of retries for transient failures
 
+# Global discovery limits (safety measures)
+MAX_TOTAL_DISCOVERIES_PER_RUN = 200  # Hard cap on total URLs discovered per run
+MAX_URLS_PER_SOURCE = 25  # Hard cap per individual source (overrides type limits)
+
 # Load environment variables from env.local
 load_dotenv('env.local')
 
@@ -23,27 +27,27 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 # Type-specific discovery configuration
 DISCOVERY_CONFIG = {
     "dedicated_portal": {
-        "limit": 100,
+        "limit": 20,  # Reduced from 100 - these are focused sites
         "keywords": "villagrunde storparceller erhvervsgrunde parcelhusgrunde",
         "classify": False
     },
     "kortinfo": {
-        "limit": 100,
+        "limit": 15,  # Reduced from 100 - these are property-specific sites
         "keywords": "parcelhusgrunde boliggrunde erhvervsgrunde grund plot area",
         "classify": False
     },
     "news_feed": {
-        "limit": 20,
-        "keywords": "grundsalg byggegrunde ejendomme udbud salg",
+        "limit": 10,  # Reduced from 20 - news feeds change frequently
+        "keywords": "grund salg bygge ejendom udbud bolig erhverv",  # More flexible keywords
         "classify": True  # Use AI to filter irrelevant news
     },
     "municipality_subsection": {
-        "limit": 50,
-        "keywords": "grundsalg parcelhusgrunde erhvervsgrunde byggegrunde",
+        "limit": 8,   # Reduced from 50 - most municipalities have few active listings
+        "keywords": "grund salg ejendom bygge bolig erhverv parcelhus villa storparcel udbud",  # More flexible keywords
         "classify": False
     },
     "minimal": {
-        "limit": 5,
+        "limit": 3,   # Reduced from 5 - these are basic scans
         "keywords": "grundsalg ejendomme",
         "classify": False
     }
@@ -85,6 +89,23 @@ def log_failure(timestamp: str, url: str, source_id: str, failure_type: str, err
         append_row("failures", [timestamp, url, source_id, failure_type, error_message])
     except Exception as e:
         print(f"  Warning: Could not log failure to sheets: {e}")
+
+
+def append_row_safe(sheet_name: str, values: list, stats: Optional[dict] = None, context: str = "") -> bool:
+    """Append to Google Sheets but swallow failures so monitoring can continue."""
+    try:
+        append_row(sheet_name, values)
+        return True
+    except Exception as e:
+        error_message = str(e)
+        print(f"Warning: Could not append to {sheet_name}: {error_message}")
+        if stats is not None:
+            stats.setdefault("sheet_failed", []).append({
+                "sheet": sheet_name,
+                "context": context,
+                "error": error_message
+            })
+        return False
 
 
 def get_existing_urls() -> set:
@@ -229,10 +250,10 @@ def is_property_related(url: str, content: str) -> bool:
     result = classify_relevance(url, content)
     return result.get("is_relevant", False)
 
-def discover_kortinfo_urls(base_url: str, seen_urls: set) -> List[str]:
+def discover_kortinfo_urls(base_url: str, seen_urls: set) -> tuple[List[str], Optional[str]]:
     """Extract property URLs from kortinfo sites via scrape (they're JavaScript SPAs)."""
     if not firecrawl:
-        return []
+        return [], "Firecrawl not initialized"
 
     print(f"Scraping kortinfo site {base_url}...", flush=True)
     try:
@@ -269,16 +290,16 @@ def discover_kortinfo_urls(base_url: str, seen_urls: set) -> List[str]:
             ]
 
         print(f"Found {len(new_urls)} property URLs from kortinfo scrape.")
-        return new_urls
+        return new_urls, None
     except Exception as e:
         print(f"Kortinfo scrape failed for {base_url}: {e}")
-        return []
+        return [], str(e)
 
-def discover_new_urls(source: dict, seen_urls: set) -> List[str]:
+def discover_new_urls(source: dict, seen_urls: set) -> tuple[List[str], Optional[str]]:
     """Use Firecrawl to find new potential property listing URLs with type-specific config."""
     if not firecrawl:
         print("Firecrawl not initialized, skipping discovery.")
-        return []
+        return [], "Firecrawl not initialized"
 
     base_url = source.get("url", "")
     source_type = source.get("type", "municipality_subsection")
@@ -291,7 +312,7 @@ def discover_new_urls(source: dict, seen_urls: set) -> List[str]:
     # MINIMAL: Just return the base URL for direct scraping
     if source_type == "minimal":
         print(f"Minimal site {base_url} - returning base URL only")
-        return [base_url] if base_url not in seen_urls else []
+        return ([base_url] if base_url not in seen_urls else []), None
 
     # OTHER TYPES: Use map_url
     print(f"Mapping {base_url} (type: {source_type}, limit: {config['limit']})...", flush=True)
@@ -304,18 +325,25 @@ def discover_new_urls(source: dict, seen_urls: set) -> List[str]:
 
         # map_url returns a list directly
         discovered = map_result if isinstance(map_result, list) else map_result.get("links", [])
+        print(f"  Raw discovery: {len(discovered)} URLs found")
 
         # Filter out PDFs and already seen URLs
         new_urls = [
             url for url in discovered
             if url not in seen_urls and not url.lower().endswith('.pdf')
         ]
+        print(f"  After filtering: {len(new_urls)} new URLs")
+
+        # Apply safety limits
+        if len(new_urls) > MAX_URLS_PER_SOURCE:
+            print(f"  Limiting to {MAX_URLS_PER_SOURCE} URLs (found {len(new_urls)})")
+            new_urls = new_urls[:MAX_URLS_PER_SOURCE]
 
         print(f"Found {len(new_urls)} new URLs out of {len(discovered)} mapped.")
-        return new_urls
+        return new_urls, None
     except Exception as e:
         print(f"Firecrawl map failed for {base_url}: {e}")
-        return []
+        return [], str(e)
 
 EXTRACTION_PROMPT = """Analyze this Danish municipality page. Output JSON:
 {
@@ -323,7 +351,8 @@ EXTRACTION_PROMPT = """Analyze this Danish municipality page. Output JSON:
   "confidence": 0.0-1.0,           // How confident are you?
   "title": string,                 // Brief title
   "municipality": string,          // Which kommune?
-  "summary": string                // 1-2 sentence description in Danish
+  "summary": string,               // 1-2 sentence description in Danish
+  "published_date": string|null    // Date of publication or last update if available (YYYY-MM-DD), otherwise null
 }
 
 Set is_property_listing=true if this is about: grundsalg, byggegrunde, parcelhusgrunde, erhvervsgrunde, ejendomme til salg, or any property/land sale announcement.
@@ -331,7 +360,7 @@ Language is Danish. Output JSON only."""
 
 
 def send_slack_notification(message: str, proposals: list = None, stats: dict = None):
-    """Send notification to Slack when new proposals are found or failures occur."""
+    """Send notification to Slack with daily run summary and proposals."""
     import requests
 
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
@@ -348,23 +377,62 @@ def send_slack_notification(message: str, proposals: list = None, stats: dict = 
 
     details_lines = []
 
+    # Add Run Statistics Summary
+    if stats:
+        details_lines.append(
+            f"📊 Run Stats: Checked {stats.get('sources_processed', 0)} sources | "
+            f"Found {stats.get('urls_discovered', 0)} new URLs | "
+            f"Scraped {stats.get('scrape_success', 0)}"
+        )
+        if stats.get('skipped_irrelevant', 0) > 0:
+            details_lines.append(f"   (Skipped {stats.get('skipped_irrelevant', 0)} irrelevant pages)")
+        details_lines.append("")  # Spacer
+
     # Add proposals section if any
     if proposals:
+        details_lines.append(f"🆕 Proposals ({len(proposals)}):")
         for p in proposals[:10]:  # Limit to 10 in message
             conf = p.get('confidence', 0)
             conf_str = f"{int(conf * 100)}%" if isinstance(conf, (int, float)) else str(conf)
+            date_str = p.get('published_date')
+            date_info = f" ({date_str})" if date_str else ""
             details_lines.append(
-                f"• {p.get('municipality', 'Unknown')}: {p.get('title', 'Untitled')} ({conf_str} confidence)\n  {p.get('url', '')}"
+                f"• {p.get('municipality', 'Unknown')}: {p.get('title', 'Untitled')} ({conf_str} confidence){date_info}\n  {p.get('url', '')}"
             )
+        if len(proposals) > 10:
+             details_lines.append(f"  ... and {len(proposals) - 10} more")
+        details_lines.append("")  # Spacer
 
     # Add failures section if any
     if stats:
-        total_failures = len(stats.get("scrape_failed", [])) + len(stats.get("extraction_failed", []))
+        discovery_failures = stats.get("discovery_failed", [])
+        sheet_failures = stats.get("sheet_failed", [])
+        scrape_failures = stats.get("scrape_failed", [])
+        classification_failures = stats.get("classification_failed", [])
+        extraction_failures = stats.get("extraction_failed", [])
+        total_failures = (
+            len(discovery_failures)
+            + len(sheet_failures)
+            + len(scrape_failures)
+            + len(classification_failures)
+            + len(extraction_failures)
+        )
         if total_failures > 0:
-            details_lines.append(f"\n❌ Failures ({total_failures}):")
-            for fail in stats.get("scrape_failed", [])[:5]:
+            details_lines.append(f"❌ Failures ({total_failures}):")
+            for fail in discovery_failures[:5]:
+                source_id = fail.get("source_id", "unknown") or "unknown"
+                details_lines.append(
+                    f"  • Discover ({source_id}): {fail.get('error', '')[:60]}..."
+                )
+            for fail in sheet_failures[:5]:
+                details_lines.append(
+                    f"  • Sheets ({fail.get('sheet', '')}): {fail.get('error', '')[:60]}..."
+                )
+            for fail in scrape_failures[:5]:
                 details_lines.append(f"  • Scrape: {fail['url'][:60]}...")
-            for fail in stats.get("extraction_failed", [])[:5]:
+            for fail in classification_failures[:5]:
+                details_lines.append(f"  • Classify: {fail['url'][:60]}...")
+            for fail in extraction_failures[:5]:
                 details_lines.append(f"  • Extract: {fail['url'][:60]}...")
             if total_failures > 10:
                 details_lines.append(f"  ... and {total_failures - 10} more")
@@ -426,6 +494,7 @@ def main():
         "urls_discovered": 0,
         "urls_attempted": 0,
         "scrape_success": 0,
+        "discovery_failed": [],    # List of {"source_id": ..., "url": ..., "error": ...}
         "scrape_failed": [],       # List of {"url": ..., "source_id": ..., "error": ...}
         "classification_success": 0,
         "classification_failed": [],
@@ -433,6 +502,7 @@ def main():
         "extraction_failed": [],
         "proposals_created": 0,
         "skipped_irrelevant": 0,
+        "sheet_failed": [],        # List of {"sheet": ..., "context": ..., "error": ...}
     }
 
     # 1. Load context
@@ -441,7 +511,12 @@ def main():
 
     if not sources:
         print("No sources found. Ensure 'sources' sheet exists and has URLs.")
-        append_row("events", [timestamp, "system", "Run Summary", "No sources found", "", "", "", ""])
+        append_row_safe(
+            "events",
+            [timestamp, "system", "Run Summary", "No sources found", "", "", "", ""],
+            stats,
+            context="no_sources"
+        )
         return
 
     # ============================================
@@ -451,18 +526,45 @@ def main():
     all_discoveries = []  # List of (source, url) tuples
 
     for source in sources:
+        # Check global discovery limit
+        if len(all_discoveries) >= MAX_TOTAL_DISCOVERIES_PER_RUN:
+            print(f"⚠️ Reached global discovery limit ({MAX_TOTAL_DISCOVERIES_PER_RUN}). Stopping discovery.")
+            break
+            
         stats["sources_processed"] += 1
-        new_urls = discover_new_urls(source, seen_urls)
+        new_urls, discovery_error = discover_new_urls(source, seen_urls)
+
+        if discovery_error:
+            error_entry = {
+                "source_id": source.get("municipality", ""),
+                "url": source.get("url", ""),
+                "error": discovery_error
+            }
+            stats["discovery_failed"].append(error_entry)
+            log_failure(
+                timestamp,
+                source.get("url", ""),
+                source.get("municipality", ""),
+                "discovery_failed",
+                discovery_error
+            )
+            # Skip to next source since we could not discover URLs here
+            continue
 
         # Log each discovery to 'discoveries' tab (raw Firecrawl findings)
         for url in new_urls:
-            append_row("discoveries", [
-                timestamp,
-                source.get("municipality", ""),
-                source.get("name", ""),
-                url,
-                source.get("type", "")
-            ])
+            append_row_safe(
+                "discoveries",
+                [
+                    timestamp,
+                    source.get("municipality", ""),
+                    source.get("name", ""),
+                    url,
+                    source.get("type", "")
+                ],
+                stats,
+                context=source.get("municipality", "")
+            )
             all_discoveries.append((source, url))
             stats["urls_discovered"] += 1
 
@@ -473,9 +575,25 @@ def main():
     # PHASE 2: AI Analysis (only if new URLs found)
     # ============================================
     if not all_discoveries:
-        summary = f"Processed {len(sources)} sources. No new URLs found - AI analysis skipped."
-        append_row("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""])
+        summary_parts = [
+            f"Processed {len(sources)} sources",
+            "No new URLs found - AI analysis skipped"
+        ]
+        if stats["discovery_failed"]:
+            summary_parts.append(f"⚠️ Discovery failures: {len(stats['discovery_failed'])}")
+        summary = " | ".join(summary_parts)
+        append_row_safe(
+            "events",
+            [timestamp, "system", "Run Summary", summary, "", "", "", ""],
+            stats,
+            context="no_discoveries"
+        )
         print(f"\n✅ {summary}")
+
+        if stats["discovery_failed"] or stats["sheet_failed"]:
+            failure_count = len(stats["discovery_failed"]) + len(stats["sheet_failed"])
+            message = f"🏠 Grundsalg Monitor: Run blocked by infrastructure issues ({failure_count})"
+            send_slack_notification(message, [], stats)
         return
 
     print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
@@ -494,7 +612,7 @@ def main():
             stats["scrape_failed"].append({"url": url, "source_id": source_id, "error": scrape_error})
             log_failure(timestamp, url, source_id, "scrape_failed", scrape_error)
             # Still mark as seen to avoid re-processing
-            append_row("seen_urls", [url, timestamp])
+            append_row_safe("seen_urls", [url, timestamp], stats, context=source_id)
             seen_urls.add(url)
             continue
 
@@ -510,7 +628,7 @@ def main():
             stats["classification_failed"].append({"url": url, "source_id": source_id, "error": str(e)})
             log_failure(timestamp, url, source_id, "classification_failed", str(e))
             # Still mark as seen
-            append_row("seen_urls", [url, timestamp])
+            append_row_safe("seen_urls", [url, timestamp], stats, context=source_id)
             seen_urls.add(url)
             continue
 
@@ -518,7 +636,7 @@ def main():
             print(f"  ⏭️ Skipping (not relevant): {url} - {classification.get('reason', '')}", flush=True)
             stats["skipped_irrelevant"] += 1
             # Mark as seen to avoid re-processing
-            append_row("seen_urls", [url, timestamp])
+            append_row_safe("seen_urls", [url, timestamp], stats, context=source_id)
             seen_urls.add(url)
             continue
 
@@ -539,23 +657,25 @@ def main():
             stats["extraction_success"] += 1
             stats["proposals_created"] += 1
 
-            # Simplified proposals row: timestamp, municipality, title, url, confidence, summary
+            # Simplified proposals row: timestamp, municipality, title, url, confidence, summary, published_date
             row = [
                 timestamp,
                 source.get("municipality", ""),
                 data.get("title", ""),
                 url,
                 data.get("confidence", 0),
-                data.get("summary", "")
+                data.get("summary", ""),
+                data.get("published_date", "")
             ]
-            append_row("proposals", row)
+            append_row_safe("proposals", row, stats, context=source_id)
 
             # Collect for Slack notification
             proposals_list.append({
                 "municipality": source.get("name", source.get("municipality", "")),
                 "title": data.get("title", "Untitled"),
                 "url": url,
-                "confidence": data.get("confidence", 0)
+                "confidence": data.get("confidence", 0),
+                "published_date": data.get("published_date", "")
             })
         else:
             # Extraction returned None (failed internally)
@@ -563,13 +683,19 @@ def main():
             log_failure(timestamp, url, source_id, "extraction_failed", "Extraction returned None")
 
         # Mark as seen
-        append_row("seen_urls", [url, timestamp])
+        append_row_safe("seen_urls", [url, timestamp], stats, context=source_id)
         seen_urls.add(url)
 
     # ============================================
     # PHASE 3: Summary + Slack Notification
     # ============================================
-    total_failures = len(stats["scrape_failed"]) + len(stats["classification_failed"]) + len(stats["extraction_failed"])
+    total_failures = (
+        len(stats["discovery_failed"]) +
+        len(stats["scrape_failed"]) +
+        len(stats["classification_failed"]) +
+        len(stats["extraction_failed"]) +
+        len(stats["sheet_failed"])
+    )
 
     # Build detailed summary
     summary_parts = [
@@ -579,28 +705,35 @@ def main():
         f"Proposals: {stats['proposals_created']}",
         f"Skipped: {stats['skipped_irrelevant']} (not relevant)",
     ]
+    if stats["discovery_failed"]:
+        summary_parts.append(f"Discovery failures: {len(stats['discovery_failed'])}")
+    if stats.get("sheet_failed"):
+        summary_parts.append(f"Sheet failures: {len(stats['sheet_failed'])}")
     if total_failures > 0:
         summary_parts.append(f"⚠️ Total failures: {total_failures}")
 
     summary = " | ".join(summary_parts)
-    append_row("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""])
+    append_row_safe("events", [timestamp, "system", "Run Summary", summary, "", "", "", ""], stats, context="run_summary")
     print(f"\n✅ {summary}")
 
     # Print failure breakdown if any
     if total_failures > 0:
         print(f"\n⚠️ Failure breakdown:")
+        print(f"   Discovery failures: {len(stats['discovery_failed'])}")
+        print(f"   Sheet failures: {len(stats['sheet_failed'])}")
         print(f"   Scrape failures: {len(stats['scrape_failed'])}")
         print(f"   Classification failures: {len(stats['classification_failed'])}")
         print(f"   Extraction failures: {len(stats['extraction_failed'])}")
 
-    # Send Slack notification if we found proposals OR had failures
-    if stats["proposals_created"] > 0 or total_failures > 0:
-        if total_failures > 0:
-            message = f"🏠 Grundsalg Monitor: {stats['proposals_created']} proposals, ❌ {total_failures} failures"
-        else:
-            message = f"🏠 Grundsalg Monitor: Found {stats['proposals_created']} new property listings today!"
+    # Send Daily Update Notification (Always)
+    if stats["proposals_created"] > 0:
+        message = f"🚀 Grundsalg Monitor: Found {stats['proposals_created']} new listings!"
+    elif total_failures > 0:
+        message = f"⚠️ Grundsalg Monitor: Completed with {total_failures} failures."
+    else:
+        message = f"✅ Grundsalg Monitor: Daily check complete. No new listings."
 
-        send_slack_notification(message, proposals_list, stats)
+    send_slack_notification(message, proposals_list, stats)
 
 if __name__ == "__main__":
     main()
