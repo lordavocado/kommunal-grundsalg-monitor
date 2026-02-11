@@ -574,6 +574,8 @@ def main():
     # ============================================
     # PHASE 2: AI Analysis (only if new URLs found)
     # ============================================
+    proposals_list = []  # Collect for Slack notification
+
     if not all_discoveries:
         summary_parts = [
             f"Processed {len(sources)} sources",
@@ -589,16 +591,8 @@ def main():
             context="no_discoveries"
         )
         print(f"\n✅ {summary}")
-
-        if stats["discovery_failed"] or stats["sheet_failed"]:
-            failure_count = len(stats["discovery_failed"]) + len(stats["sheet_failed"])
-            message = f"🏠 Grundsalg Monitor: Run blocked by infrastructure issues ({failure_count})"
-            send_slack_notification(message, [], stats)
-        return
-
-    print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
-
-    proposals_list = []  # Collect for Slack notification
+    else:
+        print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
 
     for source, url in all_discoveries:
         stats["urls_attempted"] += 1
@@ -718,7 +712,7 @@ def main():
 
     # Print failure breakdown if any
     if total_failures > 0:
-        print(f"\n⚠️ Failure breakdown:")
+        print("\n⚠️ Failure breakdown:")
         print(f"   Discovery failures: {len(stats['discovery_failed'])}")
         print(f"   Sheet failures: {len(stats['sheet_failed'])}")
         print(f"   Scrape failures: {len(stats['scrape_failed'])}")
@@ -731,7 +725,7 @@ def main():
     elif total_failures > 0:
         message = f"⚠️ Grundsalg Monitor: Completed with {total_failures} failures."
     else:
-        message = f"✅ Grundsalg Monitor: Daily check complete. No new listings."
+        message = "✅ Grundsalg Monitor: Daily check complete. No new listings."
 
     send_slack_notification(message, proposals_list, stats)
 
