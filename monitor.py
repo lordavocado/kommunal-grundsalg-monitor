@@ -377,39 +377,25 @@ def send_slack_notification(message: str, proposals: list = None, stats: dict = 
 
     details_lines = []
 
-    # Add Run Statistics Summary
+    # 1. Run Statistics Section (Granular and Reliable)
     if stats:
+        details_lines.append("📊 *Daily Run Statistics*")
         details_lines.append(
-            f"📊 Run Stats: Checked {stats.get('sources_processed', 0)} sources | "
-            f"Found {stats.get('urls_discovered', 0)} new URLs | "
-            f"Scraped {stats.get('scrape_success', 0)}"
+            f"• Sources Processed: {stats.get('sources_processed', 0)}\n"
+            f"• URLs Discovered: {stats.get('urls_discovered', 0)}\n"
+            f"• Pages Scraped: {stats.get('scrape_success', 0)} successful / {stats.get('urls_attempted', 0)} total\n"
+            f"• AI Filtered: {stats.get('classification_success', 0)} classified ({stats.get('skipped_irrelevant', 0)} irrelevant)"
         )
-        if stats.get('skipped_irrelevant', 0) > 0:
-            details_lines.append(f"   (Skipped {stats.get('skipped_irrelevant', 0)} irrelevant pages)")
         details_lines.append("")  # Spacer
 
-    # Add proposals section if any
-    if proposals:
-        details_lines.append(f"🆕 Proposals ({len(proposals)}):")
-        for p in proposals[:10]:  # Limit to 10 in message
-            conf = p.get('confidence', 0)
-            conf_str = f"{int(conf * 100)}%" if isinstance(conf, (int, float)) else str(conf)
-            date_str = p.get('published_date')
-            date_info = f" ({date_str})" if date_str else ""
-            details_lines.append(
-                f"• {p.get('municipality', 'Unknown')}: {p.get('title', 'Untitled')} ({conf_str} confidence){date_info}\n  {p.get('url', '')}"
-            )
-        if len(proposals) > 10:
-             details_lines.append(f"  ... and {len(proposals) - 10} more")
-        details_lines.append("")  # Spacer
-
-    # Add failures section if any
+    # 2. Failures Section (if any)
     if stats:
         discovery_failures = stats.get("discovery_failed", [])
         sheet_failures = stats.get("sheet_failed", [])
         scrape_failures = stats.get("scrape_failed", [])
         classification_failures = stats.get("classification_failed", [])
         extraction_failures = stats.get("extraction_failed", [])
+
         total_failures = (
             len(discovery_failures)
             + len(sheet_failures)
@@ -417,25 +403,42 @@ def send_slack_notification(message: str, proposals: list = None, stats: dict = 
             + len(classification_failures)
             + len(extraction_failures)
         )
+
         if total_failures > 0:
-            details_lines.append(f"❌ Failures ({total_failures}):")
-            for fail in discovery_failures[:5]:
+            details_lines.append(f"❌ *Failures ({total_failures})*")
+            # Discovery Failures
+            for fail in discovery_failures[:3]:
                 source_id = fail.get("source_id", "unknown") or "unknown"
-                details_lines.append(
-                    f"  • Discover ({source_id}): {fail.get('error', '')[:60]}..."
-                )
-            for fail in sheet_failures[:5]:
-                details_lines.append(
-                    f"  • Sheets ({fail.get('sheet', '')}): {fail.get('error', '')[:60]}..."
-                )
-            for fail in scrape_failures[:5]:
-                details_lines.append(f"  • Scrape: {fail['url'][:60]}...")
-            for fail in classification_failures[:5]:
-                details_lines.append(f"  • Classify: {fail['url'][:60]}...")
-            for fail in extraction_failures[:5]:
-                details_lines.append(f"  • Extract: {fail['url'][:60]}...")
+                details_lines.append(f"• [Discovery] {source_id}: {fail.get('error', '')[:50]}...")
+
+            # Scrape Failures
+            for fail in scrape_failures[:3]:
+                details_lines.append(f"• [Scrape] {fail['url'][:50]}...")
+
+            # AI Failures
+            for fail in classification_failures[:2]:
+                details_lines.append(f"• [Classify] {fail['url'][:50]}...")
+            for fail in extraction_failures[:2]:
+                details_lines.append(f"• [Extract] {fail['url'][:50]}...")
+
             if total_failures > 10:
-                details_lines.append(f"  ... and {total_failures - 10} more")
+                details_lines.append(f"  ... and {total_failures - 10} more failures (check logs for details)")
+            details_lines.append("")  # Spacer
+
+    # 3. Findings Section (Proposals) - AT THE END
+    if proposals:
+        details_lines.append(f"🆕 *Special Findings ({len(proposals)})*")
+        for p in proposals[:15]:  # Show more findings if they exist
+            conf = p.get('confidence', 0)
+            conf_str = f"{int(conf * 100)}%" if isinstance(conf, (int, float)) else str(conf)
+            date_str = p.get('published_date')
+            date_info = f" ({date_str})" if date_str else ""
+            details_lines.append(
+                f"• *{p.get('municipality', 'Unknown')}*: {p.get('title', 'Untitled')} ({conf_str}){date_info}\n  {p.get('url', '')}"
+            )
+        if len(proposals) > 15:
+             details_lines.append(f"  ... and {len(proposals) - 15} more new listings found.")
+        details_lines.append("")  # Spacer
 
     payload["details"] = "\n".join(details_lines)
 
@@ -574,6 +577,8 @@ def main():
     # ============================================
     # PHASE 2: AI Analysis (only if new URLs found)
     # ============================================
+    proposals_list = []  # Collect for Slack notification
+
     if not all_discoveries:
         summary_parts = [
             f"Processed {len(sources)} sources",
@@ -589,16 +594,8 @@ def main():
             context="no_discoveries"
         )
         print(f"\n✅ {summary}")
-
-        if stats["discovery_failed"] or stats["sheet_failed"]:
-            failure_count = len(stats["discovery_failed"]) + len(stats["sheet_failed"])
-            message = f"🏠 Grundsalg Monitor: Run blocked by infrastructure issues ({failure_count})"
-            send_slack_notification(message, [], stats)
-        return
-
-    print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
-
-    proposals_list = []  # Collect for Slack notification
+    else:
+        print(f"\n🤖 Phase 2: Running AI analysis on {discovery_count} URLs...\n")
 
     for source, url in all_discoveries:
         stats["urls_attempted"] += 1
@@ -718,7 +715,7 @@ def main():
 
     # Print failure breakdown if any
     if total_failures > 0:
-        print(f"\n⚠️ Failure breakdown:")
+        print("\n⚠️ Failure breakdown:")
         print(f"   Discovery failures: {len(stats['discovery_failed'])}")
         print(f"   Sheet failures: {len(stats['sheet_failed'])}")
         print(f"   Scrape failures: {len(stats['scrape_failed'])}")
@@ -731,7 +728,7 @@ def main():
     elif total_failures > 0:
         message = f"⚠️ Grundsalg Monitor: Completed with {total_failures} failures."
     else:
-        message = f"✅ Grundsalg Monitor: Daily check complete. No new listings."
+        message = "✅ Grundsalg Monitor: Daily check complete. No new listings."
 
     send_slack_notification(message, proposals_list, stats)
 
